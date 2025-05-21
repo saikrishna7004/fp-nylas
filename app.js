@@ -17,7 +17,7 @@ const oauth2Client = new google.auth.OAuth2(
 
 const accessTokens = {};
 
-app.get('/fpylas/connect', (req, res) => {
+app.get('/connect', (req, res) => {
     const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.modify'],
@@ -27,13 +27,13 @@ app.get('/fpylas/connect', (req, res) => {
     res.redirect(url);
 });
 
-app.get('/index', (req, res) => {
+app.get('/', (req, res) => {
     console.log("HELLO WORLD!!");
     
     res.status(200).send("Hello World!");
 })
 
-app.post('/fpylas/webhook', async (req, res) => {
+app.post('/webhook', async (req, res) => {
     console.log("Gmail webhook recieved");
 
     console.log(JSON.stringify(req.body));
@@ -72,7 +72,7 @@ app.post('/fpylas/webhook', async (req, res) => {
     return res.status(200).send();
 })
 
-app.get('/fpylas/auth', async (req, res) => {
+app.get('/auth', async (req, res) => {
     const code = req.query.code;
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
