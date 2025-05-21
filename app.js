@@ -42,33 +42,32 @@ app.post('/webhook', async (req, res) => {
 
     if (!message || !message.data || !message.messageId) {
         console.log("no message found");
+        return res.status(200).send();
     }
 
-    const encodedMessage = message.data;
-    console.log('encoded message: ', encodedMessage);
-    console.log("message: ", JSON.stringify(message));
-    console.log("message Id: ", message.messageId);
-    console.log("message Id2: ", message.message_id);
-    
-    const decodedMessage = JSON.parse(
-        Buffer.from(encodedMessage, "base64").toString("utf-8")
-    );
+    try {
+        const encodedMessage = message.data;
+        const decodedMessage = JSON.parse(
+            Buffer.from(encodedMessage, "base64").toString("utf-8")
+        );
 
-    console.log("decoded message: ", decodedMessage);
-    if (!decodedMessage.emailAddress) {
-        res.status(500).send("Invalid message format!");
+        console.log("decoded message: ", decodedMessage);
+        if (!decodedMessage.emailAddress) {
+            throw new Error("Invalid message format!");
+        }
+        
+        const emailCreds = accessTokens[decodedMessage.emailAddress];
+
+        if (!emailCreds)    throw new Error(`${decodedMessage.emailAddress} not authenticated!`);
+
+        await getMessages(emailCreds, decodedMessage.emailAddress, decodedMessage.historyId);
+    } catch (err) {
+        // Sending back a status code of 200 to acknowledge google that message is recieved
+        // otherwise it floods us with same messages again and again until it gets an acknowledgement (can only be done via 200 status code)
+        
+        console.log("error: ", err);
+        return res.status(200).send();
     }
-    
-    console.log('email address: ', decodedMessage.emailAddress);
-
-    const emailCreds = accessTokens[decodedMessage.emailAddress];
-
-    if (!emailCreds)    return res.status(500).send(`${decodedMessage.emailAddress} not authenticated!`);
-
-    console.log('email creds: ', emailCreds);
-
-    await getMessages(emailCreds, decodedMessage.emailAddress, decodedMessage.historyId);
-
     return res.status(200).send();
 })
 
@@ -132,24 +131,42 @@ const getMessages = async (emailCreds, userEmail, historyId) => {
 
     const messagesRes = await gmailClient.users.history.list({
         userId: 'me',
-        startHistoryId: historyId
+        startHistoryId: emailCreds.historyId
     })
 
     console.log("messages: ", JSON.stringify(messagesRes));
 
-    if (!messagesRes || !messagesRes.data) {
+    if (!messagesRes || !messagesRes.data || messagesRes.data.history) {
         throw new Error("no messages found for user: " + userEmail);
     }
 
-    for (const message of messagesRes.data) {
-        const messageData = await gmailClient.users.messages.get({
-            userId: 'me',
-            id: message.id,
-            format: 'full'
-        })
+    for (const historyRecord of messagesRes.data.history) {
+        if (!historyRecord.messagesAdded)   continue;
 
-        console.log('message data: ', messageData);
+        for (let message of historyRecord.messagesAdded) {
+            if (!message)   continue;
+            message = message.message; 
+
+
+            if (message.labelIds && (message.labelIds.includes('SENT') || message.labelIds.includes('INBOX'))) {
+                // process the message 
+                const messageData = await gmailClient.users.messages.get({
+                    userId: 'me',
+                    id: message.id,
+                    format: 'full',
+                })
+
+                console.log('messageData: ', JSON.stringify(messageData));
+            }
+        }
+
     }
+
+    // we have to update the historyId each time a new message is recieved
+    // we fetch messages from the previous historyId, and then update userInfo with
+    // the historyId that we have recieved latest.
+    accessTokens[userEmail] = { ...emailCreds, historyId: historyId };
+    console.log('accessTokens: ', accessTokens);
 }
 
 module.exports = app;
