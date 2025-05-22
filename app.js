@@ -136,7 +136,7 @@ const getMessages = async (emailCreds, userEmail, historyId) => {
 
     console.log("messages: ", JSON.stringify(messagesRes));
 
-    if (!messagesRes || !messagesRes.data || messagesRes.data.history) {
+    if (!messagesRes || !messagesRes.data || !messagesRes.data.history) {
         throw new Error("no messages found for user: " + userEmail);
     }
 
